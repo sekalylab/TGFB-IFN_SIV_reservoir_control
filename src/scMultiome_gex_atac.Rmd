@@ -557,29 +557,64 @@ manual.annot <- ln.obj@meta.data |>
 
 ln.obj$manual.annotation <- manual.annot$manual.annotation
 
+manual_pathways <- readxl::read_excel('data/raw/antiviral_isg_hiv_rf_pathways.xlsx')
+
+antiviral.isgs <- manual_pathways |> 
+  filter(gs_name == 'ANTIVIRAL_ISGS_Schoggins_2011') |> 
+  select(gene_symbol) |> 
+  deframe()
+
+ln.obj <- AddModuleScore(ln.obj, features = list(antiviral.isg = antiviral.isgs), 
+                         name = 'Antiviral.ISGs')
+
 #saveRDS(ln.obj, 
 #        'data/processed/new/ln.integrated.fine.annot.geneactivity.chromvar_v2.rds')
 ```
 
 ```{r Load files}
-#ln.obj <- readRDS('data/processed/new/ln.integrated.fine.annot.geneactivity.chromvar_v2.rds')
-#t.cell.obj <- readRDS('data/processed/new/t.cell.integrated.rds')
-#myeloid.obj <- readRDS('data/processed/new/myeloid_integrated.rds')
+ln.obj <- readRDS('data/processed/new/ln.integrated.fine.annot.geneactivity.chromvar_v2.rds')
+t.cell.obj <- readRDS('data/processed/new/t.cell.integrated.rds')
+myeloid.obj <- readRDS('data/processed/new/myeloid_integrated.rds')
 ```
 
 ```{r Figure 4}
 ### A/B ----
 Idents(ln.obj) <- ln.obj$manual.annotation.fine
+# IFN expression
+ifng.p <- FeaturePlot(ln.obj, features = 'IFNG', reduction = 'wnn.umap', 
+                      min.cutoff = 'q1', max.cutoff = 'q60', 
+                      cols = c('lightgrey', 'red3'), raster = T,
+                      raster.dpi = c(2048, 2048), pt.size = 5) +
+  theme(plot.title  = element_blank())
 
-ifng.vln <- VlnPlot(ln.obj, features = 'IFNG') + xlab('') +NoLegend()
+ifng.vln <- VlnPlot(ln.obj, features = 'IFNG', raster = T) + xlab('') +NoLegend()+
+  theme(plot.title  = element_blank())
 
-antiviral.vln <- VlnPlot(ln.obj, features =  'Antiviral.ISGs1') + 
-  xlab('') + ggtitle('Antiviral ISGs') + NoLegend()
+p <- free(ifng.p, type = 'label') + ifng.vln + plot_layout(ncol = 2, widths = c(2, 3))
 
-vln.plot.isg <- ifng.vln  + antiviral.vln + plot_layout(ncol = 2)
-  
-#ggsave('results/figures/new/violinplot_ln_IFNG_Antiviral_module_v2.png', vln.plot.isg, 
-#       dpi = 'retina', width = 9.5, height = 5)
+#ggsave('results/figures/new/umap_violin_ln_IFNG.pdf', 
+#       p, width = 10, height = 4.8)
+
+# ISG module expression
+antiviral.p <- FeaturePlot(ln.obj, features = 'Antiviral.ISGs1', reduction = 'wnn.umap', 
+                           min.cutoff = 'q1', max.cutoff = 'q60' ,
+                           cols = c('lightgrey', 'red3'), raster = T,
+                           raster.dpi = c(2048, 2048), pt.size = 5) +
+  theme(plot.title  = element_blank())
+
+antiviral.vln <- VlnPlot(ln.obj, features =  'Antiviral.ISGs1',  raster = T) + 
+  xlab('') + ggtitle('Antiviral ISGs') + NoLegend()+
+  theme(plot.title  = element_blank())
+
+p <- free(antiviral.p, type = 'label') + antiviral.vln + 
+  plot_layout(ncol = 2, widths = c(2, 3))
+
+#ggsave('results/figures/new/umap_violin_ln_Antiviral_module.pdf', 
+#       p, width = 10, height = 4.8)
+
+library(rstatix)
+df.stat <- df |> 
+  cor_test(vars = 'Viral load', method = 'spearman')
 
 write_tsv(ifng.vln@data, "results/figures/new/source_data/fig4A_IFNG_VlnPlot.tsv")
 write_tsv(antiviral.vln@data, "results/figures/new/source_data/fig4B_AntiviralISGs_VlnPlot.tsv")
@@ -610,6 +645,14 @@ umap.tcell <- DimPlot(t.cell.obj, group.by = 'manual.annotation.fine',
 
 #ggsave('results/figures/new/umap_tcell_subsets_v2.png', 
 #       umap.tcell, width = 6.5, height = 3.5, dpi = 'retina', bg = 'white')
+
+umap.tcell <- DimPlot(t.cell.obj, group.by = 'manual.annotation.fine',   
+        reduction = 'wnn.umap', label.size = 5, cols = cols.vec, raster = T,
+        raster.dpi = c(1024, 1024), pt.size = 4) + 
+  theme(plot.title = element_blank())
+
+#ggsave('results/figures/new/umap_tcell_subsets_v2.pdf', 
+#       umap.tcell, width = 8, height = 4.5)
 
 ### D ----
 Idents(t.cell.obj) <- t.cell.obj$manual.annotation.fine
@@ -822,6 +865,19 @@ lgd = Legend(col_fun = col_fun, title = "foo", legend_height = unit(1, "cm"),
 
 #ggsave('results/figures/new/antiviral_umap_plot_tcell_selected.png',
 #       antiviral.selected.umap, dpi = 'retina', height = 8, width = 10)
+
+ t.cell.obj$`Antiviral ISGs` <- t.cell.obj$Antiviral.ISGs1
+ 
+antiviral.selected.umap  <- FeaturePlot(t.cell.obj, reduction = 'wnn.umap', 
+                                    features = c('OAS2', 'DDX60', 
+                                                 'EIF2AK2','Antiviral ISGs'),
+                                    max.cutoff = 'q90', min.cutoff = 'q1', 
+                                    cols = c('lightgrey', 'red'), raster = T,
+                                    raster.dpi = c(1024, 1024), pt.size = 4) 
+ 
+ggsave('results/figures/new/antiviral_umap_plot_tcell_selected.pdf',
+       antiviral.selected.umap, height = 8, width = 10) 
+ 
 ### G ----
  map.myeloid <- DimPlot(myeloid.obj, group.by = 'manual.annotation.fine',   
         reduction = 'wnn.umap', label.size = 5, 
@@ -829,6 +885,17 @@ lgd = Legend(col_fun = col_fun, title = "foo", legend_height = unit(1, "cm"),
 
 #ggsave('results/figures/new/umap_myeloid_subsets.png', 
 #       umap.myeloid, scale = 0.5, dpi = 'retina', bg = 'white')
+
+umap.myeloid <- DimPlot(myeloid.obj, group.by = 'manual.annotation.fine',   
+        reduction = 'wnn.umap', label.size = 5, 
+        cols = RColorBrewer::brewer.pal(4,'Dark2'), raster = T,
+        raster.dpi = c(1024, 1024), pt.size = 8) + 
+  theme(plot.title = element_blank())
+
+ggsave('results/figures/new/umap_myeloid_subsets.pdf', 
+       umap.myeloid, height = 4,  width = 6.5)
+
+
 ### H ----
 #### GEX
 Idents(myeloid.obj) <- myeloid.obj$manual.annotation.fine
@@ -1004,6 +1071,17 @@ antiviral.umap.plot.myeloid.selected  <- FeaturePlot(myeloid.obj, reduction = 'w
 
 #ggsave('results/figures/new/antiviral_umap_plot_myeloid_selected.png', 
 #       antiviral.umap.plot.myeloid.selected, dpi = 'retina', width = 9, height = 7)
+
+myeloid.obj$`Antiviral ISGs` <- myeloid.obj$Antiviral.ISGs1
+
+antiviral.umap.plot.myeloid.selected  <- FeaturePlot(myeloid.obj, reduction = 'wnn.umap', 
+                                    features = c('DDX60', 'IFI44L', 'IFI6', 'Antiviral ISGs'), 
+                                    max.cutoff = 'q90', min.cutoff = 'q1', 
+                                    cols = c('lightgrey', 'red'), raster = T,
+                                    raster.dpi = c(1024, 1024), pt.size = 8)
+
+#ggsave('results/figures/new/antiviral_umap_plot_myeloid_selected.pdf', 
+#       antiviral.umap.plot.myeloid.selected, width = 9, height = 7)
 ```
 
 ```{r Figure 5}
@@ -1110,6 +1188,35 @@ t.cell.atac.plot.selected <- smad.plot +  fosjun.plot + irf7.plot + stat1.plot +
 
 #ggsave('results/figures/new/umap_atac_tcell_seleteced.png', t.cell.atac.plot.selected, 
 #       dpi = 'retina', width = 8, height = 6)
+
+smad.plot <- FeaturePlot(t.cell.obj, reduction = 'wnn.umap', 
+                             features = 'MA1622.1', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'blue'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 4) +   
+  ggtitle('Smad2::Smad3')
+fosjun.plot <- FeaturePlot(t.cell.obj, reduction = 'wnn.umap', 
+                             features = 'MA0099.3', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'blue'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 4) +   
+  ggtitle('FOS::JUN')
+irf7.plot <- FeaturePlot(t.cell.obj, reduction = 'wnn.umap', 
+                             features = 'MA0772.1', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'red'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 4) +   
+  ggtitle('IRF7')
+stat1.plot <- FeaturePlot(t.cell.obj, reduction = 'wnn.umap', 
+                             features = 'MA0137.3', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'red'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 4) +   
+  ggtitle('STAT1')
+
+t.cell.atac.plot.selected <- smad.plot +  fosjun.plot + irf7.plot + stat1.plot +   
+  plot_layout(ncol = 2)
+
+#ggsave('results/figures/new/umap_atac_tcell_seleteced.pdf', 
+#       t.cell.atac.plot.selected, width = 8, height = 6)
+
+
 ### C ----
 ## ATAC Low vs High SIV-DNA chromatin accessibility
 DefaultAssay(myeloid.obj) <- 'chromvar'
@@ -1208,6 +1315,33 @@ myeloid.atac.plot.selected <-  irf4.plot + irf7.plot + fos.plot + rfx2.plot  +
 
 #ggsave('results/figures/new/umap_atac_myeloid_selected.png', 
 #       myeloid.atac.plot.selected, dpi = 'retina', height = 6, width = 8)
+
+irf4.plot <-     FeaturePlot(myeloid.obj, reduction = 'wnn.umap', 
+                              features = 'MA1419.1',  max.cutoff = 'q95', 
+                             min.cutoff = 'q10', cols = c('lightgrey', 'red'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 8) + 
+  ggtitle('IRF4')
+irf7.plot <-     FeaturePlot(myeloid.obj, reduction = 'wnn.umap', 
+                             features = 'MA0772.1', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'red'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 8) +   
+  ggtitle('IRF7')
+fos.plot <-     FeaturePlot(myeloid.obj, reduction = 'wnn.umap', 
+                             features = 'MA0476.1', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'blue'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 8) +  
+  ggtitle('FOS')
+rfx2.plot <-     FeaturePlot(myeloid.obj, reduction = 'wnn.umap', 
+                             features = 'MA0600.2', max.cutoff = 'q95',
+                             min.cutoff = 'q10', cols = c('lightgrey', 'blue'),
+                         raster = T, raster.dpi = c(1024, 1024), pt.size = 8) +  
+  ggtitle('RFX2')
+
+myeloid.atac.plot.selected <-  irf4.plot + irf7.plot + fos.plot + rfx2.plot  +
+  plot_layout(ncol = 2)
+
+#ggsave('results/figures/new/umap_atac_myeloid_selected.pdf', 
+#       myeloid.atac.plot.selected, height = 6, width = 8)
 ```
 
 ```{r Figure 6}
